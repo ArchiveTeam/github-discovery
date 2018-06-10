@@ -34,11 +34,15 @@ wget.callbacks.get_urls = function(file, url, is_css, iri)
     local repo = string.match(url, "^https?://[^/]*github%.com/([^/]+/[^/]+)")
     local stars = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+starred%s+this%s+repository"')
     local forks = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+forked%s+this%s+repository"')
-    local watchers = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+are%s+watching%s+this%s+repository"')
+    local watchers = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+[^%s]+%s+watching%s+this%s+repository"')
+    local forkedfrom = string.match(html, 'forked%s+from%s+<a[^>]+>([^<]+)</a>')
+    if forkedfrom == nil then
+      forkedfrom = ''
+    end
     if repo == nil or stars == nil or forks == nil or watchers == nil then
       abortgrab = true
     end
-    extracted_data[repo .. ':' .. watchers ..  ':' .. stars .. ':' .. forks] = true
+    extracted_data[repo .. ':' .. watchers ..  ':' .. stars .. ':' .. forks .. ':' .. forkedfrom] = true
   end
 end
 
