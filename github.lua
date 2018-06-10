@@ -1,3 +1,6 @@
+dofile("urlcode.lua")
+dofile("table_show.lua")
+
 local item_type = os.getenv('item_type')
 local item_value = string.lower(os.getenv('item_value'))
 local item_dir = os.getenv('item_dir')
@@ -8,6 +11,7 @@ local tries = 0
 local abortgrab = false
 
 local extracted_data = {}
+local extracted_dates = {}
 
 read_file = function(file)
   if file then
@@ -21,28 +25,54 @@ read_file = function(file)
 end
 
 wget.callbacks.download_child_p = function(urlpos, parent, depth, start_url_parsed, iri, verdict, reason)
-  local url = urlpos["url"]["url"]
-  local html = urlpos["link_expect_html"]
-
   return false
 end
 
 wget.callbacks.get_urls = function(file, url, is_css, iri)
   local html = read_file(file)
+  local repo = string.match(url, "^https?://[^/]*github%.com/([^/]+/[^/]+)")
+
+  local function nocomma(s)
+    if s ~= nil then
+      return string.gsub(s, ",", "")
+    end
+  end
+
+  if string.match(url, "/tree%-commit/") then
+    local date = string.match(html, '"dateModified"><[^>]+datetime="([^"]+)">')
+    extracted_dates[repo] = date
+  end
 
   if string.match(html, 'aria%-label="[0-9]+%s+users?%s+starred%s+this%s+repository"') then
-    local repo = string.match(url, "^https?://[^/]*github%.com/([^/]+/[^/]+)")
-    local stars = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+starred%s+this%s+repository"')
-    local forks = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+forked%s+this%s+repository"')
-    local watchers = string.match(html, 'aria%-label="([0-9]+)%s+users?%s+[^%s]+%s+watching%s+this%s+repository"')
+    local stars = nocomma(string.match(html, 'aria%-label="([0-9,]+)%s+users?%s+starred%s+this%s+repository"'))
+    local forks = nocomma(string.match(html, 'aria%-label="([0-9,]+)%s+users?%s+forked%s+this%s+repository"'))
+    local watchers = nocomma(string.match(html, 'aria%-label="([0-9,]+)%s+users?%s+[^%s]+%s+watching%s+this%s+repository"'))
+    local contributors = nocomma(string.match(html, '<span%s+class="num%s+text%-emphasized">%s+([0-9,]+)%s+</span>%s+contributors?'))
+    local commits = nocomma(string.match(html, '<span%s+class="num%s+text%-emphasized">%s+([0-9,]+)%s+</span>%s+commits?'))
     local forkedfrom = string.match(html, 'forked%s+from%s+<a[^>]+>([^<]+)</a>')
+    local committree = string.match(html, '"([^"]+/tree%-commit/[^"]+)"')
+    if contributors == nil and string.match(html, "Fetching%s+contributors") then
+      contributors = "0"
+    end
+    if commits == nil and contributors == nil and string.match(html, "This%s+repository%s+is%s+empty%.") then
+      commits = "0"
+      contributors = "0"
+    end
     if forkedfrom == nil then
       forkedfrom = ''
     end
-    if repo == nil or stars == nil or forks == nil or watchers == nil then
+    if repo == nil or stars == nil or forks == nil or watchers == nil
+        or contributors == nil or commits == nil then
       abortgrab = true
     end
-    extracted_data[repo .. ':' .. watchers ..  ':' .. stars .. ':' .. forks .. ':' .. forkedfrom] = true
+    extracted_data[table.concat({repo, watchers, stars, forks, commits, contributors, forkedfrom}, ":")] = true
+    if commits == "0" and committree == nil then
+      extracted_dates[repo] = ""
+      return
+    elseif committree == nil then
+      abortgrab = true
+    end
+    return {{url="https://github.com" .. committree}}
   end
 end
 
@@ -89,7 +119,7 @@ end
 wget.callbacks.finish = function(start_time, end_time, wall_time, numurls, total_downloaded_bytes, total_download_time)
   local file = io.open(item_dir..'/'..warc_file_base..'_data.txt', 'w')
   for data, _ in pairs(extracted_data) do
-    file:write(data .. "\n")
+    file:write(data .. ":" .. extracted_dates[string.match(data, "([^:]+)")] .. "\n")
   end
   file:close()
 end
