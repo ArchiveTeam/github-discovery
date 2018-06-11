@@ -58,7 +58,7 @@ if not WGET_LUA:
 #
 # Update this each time you make a non-cosmetic change.
 # It will be added to the WARC files and reported to the tracker.
-VERSION = '20180611.01'
+VERSION = '20180611.02'
 USER_AGENT = 'ArchiveTeam'
 TRACKER_ID = 'githubdisco'
 TRACKER_HOST = 'tracker.archiveteam.org'
@@ -112,7 +112,8 @@ class PrepareDirectories(SimpleTask):
         item_name = item['item_name']
         escaped_item_name = item_name.replace(':', '_').replace('/', '_') \
             .replace('~', '_')
-        hashed_item_name = hashlib.sha1(escaped_item_name).hexdigest()
+        hashed_item_name = hashlib.sha1(escaped_item_name.encode('utf-8')) \
+            .hexdigest()
         dirname = '/'.join((item['data_dir'], hashed_item_name))
 
         if os.path.isdir(dirname):
